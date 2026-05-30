@@ -49,7 +49,7 @@ def _ensure_header(svc) -> None:
     """シート1行目にヘッダーが無ければ書き込む。"""
     from .schema import BusinessCard
 
-    rng = f"{config.SHEET_NAME}!A1:Q1"
+    rng = f"{config.SHEET_NAME}!A1:M1"
     resp = (
         svc.spreadsheets()
         .values()
@@ -78,7 +78,7 @@ def append_rows(rows: List[List[str]]) -> None:
             _ensure_header(svc)
             svc.spreadsheets().values().append(
                 spreadsheetId=config.SPREADSHEET_ID,
-                range=f"{config.SHEET_NAME}!A:Q",
+                range=f"{config.SHEET_NAME}!A:M",
                 valueInputOption="USER_ENTERED",
                 insertDataOption="INSERT_ROWS",
                 body={"values": rows},

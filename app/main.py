@@ -39,7 +39,7 @@ ALLOWED_MEDIA = {
 def _process_one(job_id: str, filename: str, media_type: str, data: bytes) -> None:
     """1ファイルを処理。失敗しても例外を外に出さない(ジョブ全体を止めない)。"""
     job = JOBS[job_id]
-    now = datetime.now().isoformat(timespec="seconds")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
         cards = ocr.extract_cards(data, media_type)
         if not cards:
