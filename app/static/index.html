@@ -32,8 +32,8 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>名刺スキャナー <span style="color:var(--accent)">Claude Vision</span></h1>
-    <p class="sub">名刺の画像（JPEG/PNG/WebP/GIF）または PDF をアップロードすると、AIが高精度で読み取り、スプレッドシートに書き込みます。</p>
+    <h1>名刺スキャナー <span style="color:var(--accent)">Pro</span></h1>
+    <p class="sub">名刺の画像（JPEG/PNG/WebP）または PDF をアップロードすると、AIが高精度で読み取り、スプレッドシートに書き込みます。</p>
 
     <div id="sheetsWarn" class="warn"></div>
 
@@ -114,6 +114,12 @@ uploadBtn.addEventListener('click', async ()=>{
   selected.forEach(f=> fd.append('files', f));
   const res = await fetch('/api/upload', { method:'POST', body: fd });
   const data = await res.json();
+  // 送信した分は選択リストから消す。
+  // これをしないと次の撮影時に前の名刺も再送信され、重複書き込みになる。
+  selected = [];
+  input.value = '';
+  cameraInput.value = '';
+  refreshList();
   document.getElementById('progress').style.display='block';
   document.getElementById('pTotal').textContent = data.accepted;
   poll(data.job_id);
@@ -133,7 +139,7 @@ async function poll(jobId){
   const st = document.getElementById('pStatus');
   if(j.status === 'completed'){
     st.innerHTML = '<span class="ok">✓ 完了</span>';
-    uploadBtn.disabled = false;
+    uploadBtn.disabled = selected.length === 0;
   } else {
     st.textContent = '処理中…';
     setTimeout(()=> poll(jobId), 1200);
