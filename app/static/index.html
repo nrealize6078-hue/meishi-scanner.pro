@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>名刺スキャナー (Claude Vision)</title>
+  <style>
+    :root { --bg:#0f172a; --card:#1e293b; --accent:#38bdf8; --text:#e2e8f0; --muted:#94a3b8; --ok:#4ade80; --err:#f87171; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: "Segoe UI", "Hiragino Kaku Gothic ProN", sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 32px 20px; }
+    h1 { font-size: 22px; margin-bottom: 4px; }
+    .sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+    .drop { border: 2px dashed #334155; border-radius: 14px; padding: 40px; text-align:center; cursor:pointer; transition:.2s; background:var(--card); }
+    .drop.hover { border-color: var(--accent); background:#243043; }
+    .drop p { margin: 8px 0; color: var(--muted); }
+    input[type=file] { display:none; }
+    button { background: var(--accent); color:#0f172a; border:none; padding:12px 22px; border-radius:10px; font-weight:700; font-size:15px; cursor:pointer; margin-top:16px; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .actions { margin-top:12px; }
+    button.ghost { background:transparent; color:var(--accent); border:1.5px solid var(--accent); }
+    .files { margin-top:16px; font-size:13px; color:var(--muted); }
+    .progress { margin-top:24px; background:var(--card); border-radius:12px; padding:18px; display:none; }
+    .bar { height:10px; background:#334155; border-radius:6px; overflow:hidden; margin:10px 0; }
+    .bar > div { height:100%; width:0%; background:var(--accent); transition:.3s; }
+    .stats { display:flex; gap:18px; font-size:13px; flex-wrap:wrap; }
+    .stats b { color:var(--text); }
+    .errors { margin-top:14px; font-size:12px; color:var(--err); max-height:160px; overflow:auto; }
+    .ok { color: var(--ok); }
+    .warn { background:#3b2f17; color:#fbbf24; padding:8px 12px; border-radius:8px; font-size:12px; margin-bottom:16px; display:none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>名刺スキャナー <span style="color:var(--accent)">Claude Vision</span></h1>
+    <p class="sub">名刺の画像（JPEG/PNG/WebP/GIF）または PDF をアップロードすると、AIが高精度で読み取り、スプレッドシートに書き込みます。</p>
+
+    <div id="sheetsWarn" class="warn"></div>
+
+    <div id="drop" class="drop">
+      <p style="font-size:30px">📇</p>
+      <p>ここにファイルをドラッグ＆ドロップ</p>
+      <p>または クリックして選択（複数可・画像/PDF）</p>
+      <input type="file" id="fileInput" multiple accept="image/*,application/pdf" />
+    </div>
+    <div class="actions">
+      <button id="cameraBtn" type="button" class="ghost">📷 カメラで撮影</button>
+      <input type="file" id="cameraInput" accept="image/*" capture="environment" />
+    </div>
+    <div class="files" id="fileList"></div>
+    <button id="uploadBtn" disabled>読み取り開始</button>
+
+    <div class="progress" id="progress">
+      <div class="stats">
+        <span>進捗: <b id="pDone">0</b> / <b id="pTotal">0</b></span>
+        <span>抽出枚数: <b id="pCards">0</b></span>
+        <span>書込: <b id="pWritten">0</b></span>
+        <span id="pStatus"></span>
+      </div>
+      <div class="bar"><div id="pBar"></div></div>
+      <div class="errors" id="pErrors"></div>
+    </div>
+  </div>
+
+<script>
+const drop = document.getElementById('drop');
+const input = document.getElementById('fileInput');
+const cameraBtn = document.getElementById('cameraBtn');
+const cameraInput = document.getElementById('cameraInput');
+const fileList = document.getElementById('fileList');
+const uploadBtn = document.getElementById('uploadBtn');
+let selected = [];
+
+fetch('/api/health').then(r=>r.json()).then(h=>{
+  if(!h.gemini_key_set){ showWarn('⚠ GEMINI_API_KEY が未設定です。.env に設定してください（無料取得: aistudio.google.com/apikey）。'); }
+  else if(!h.sheets_enabled){ showWarn('ℹ スプレッドシート未接続のため、結果はローカル(data/backup.jsonl)にのみ保存されます。'); }
+}).catch(()=>{});
+
+function showWarn(msg){ const w=document.getElementById('sheetsWarn'); w.textContent=msg; w.style.display='block'; }
+
+drop.addEventListener('click', ()=> input.click());
+['dragover','dragenter'].forEach(e=> drop.addEventListener(e, ev=>{ev.preventDefault(); drop.classList.add('hover');}));
+['dragleave','drop'].forEach(e=> drop.addEventListener(e, ev=>{ev.preventDefault(); drop.classList.remove('hover');}));
+drop.addEventListener('drop', ev=>{ setFiles([...ev.dataTransfer.files]); });
+input.addEventListener('change', ()=> setFiles([...input.files]));
+
+// スマホ: 背面カメラを直接起動して撮影。撮った写真は選択リストに追加。
+cameraBtn.addEventListener('click', ()=> cameraInput.click());
+cameraInput.addEventListener('change', ()=>{
+  const shot = [...cameraInput.files];
+  if(shot.length){ addFiles(shot); }
+  cameraInput.value = '';  // 連続撮影できるようにリセット
+});
+
+function setFiles(files){
+  selected = files;
+  refreshList();
+}
+
+function addFiles(files){
+  selected = [...selected, ...files];
+  refreshList();
+}
+
+function refreshList(){
+  fileList.textContent = selected.length ? `選択中: ${selected.length}件 — ` + selected.map(f=>f.name||'撮影画像').join(', ') : '';
+  uploadBtn.disabled = selected.length === 0;
+}
+
+uploadBtn.addEventListener('click', async ()=>{
+  if(!selected.length) return;
+  uploadBtn.disabled = true;
+  const fd = new FormData();
+  selected.forEach(f=> fd.append('files', f));
+  const res = await fetch('/api/upload', { method:'POST', body: fd });
+  const data = await res.json();
+  document.getElementById('progress').style.display='block';
+  document.getElementById('pTotal').textContent = data.accepted;
+  poll(data.job_id);
+});
+
+async function poll(jobId){
+  const res = await fetch('/api/status/'+jobId);
+  const j = await res.json();
+  document.getElementById('pDone').textContent = j.done;
+  document.getElementById('pTotal').textContent = j.total;
+  document.getElementById('pCards').textContent = j.cards;
+  document.getElementById('pWritten').textContent = j.written;
+  const pct = j.total ? Math.round(j.done / j.total * 100) : 100;
+  document.getElementById('pBar').style.width = pct + '%';
+  const errBox = document.getElementById('pErrors');
+  errBox.innerHTML = (j.errors||[]).map(e=>`・${e.file}: ${e.error}`).join('<br>');
+  const st = document.getElementById('pStatus');
+  if(j.status === 'completed'){
+    st.innerHTML = '<span class="ok">✓ 完了</span>';
+    uploadBtn.disabled = false;
+  } else {
+    st.textContent = '処理中…';
+    setTimeout(()=> poll(jobId), 1200);
+  }
+}
+</script>
+</body>
+</html>

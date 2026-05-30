@@ -1,0 +1,24 @@
+# Render Blueprint: このファイルがあると Render が設定を自動で読み取ります。
+# 秘密情報(sync: false)は Render の管理画面で手入力します(GitHubには載りません)。
+services:
+  - type: web
+    name: meishi-scanner
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash-lite
+      - key: SHEET_NAME
+        value: 名刺データ
+      # --- 以下は秘密情報。Render管理画面で手入力(GitHubには保存されない) ---
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SPREADSHEET_ID
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false

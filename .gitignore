@@ -1,0 +1,27 @@
+# === 秘密情報(絶対にコミットしない) ===
+.env
+.env.*
+*.json
+!render.yaml
+service-account*.json
+*-*.iam.gserviceaccount.com.json
+
+# === Python ===
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# === ローカルデータ/バックアップ ===
+data/
+
+# === OS/エディタ ===
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# === Windows用バッチ(ローカル専用) ===
+ファイアウォール許可.bat
